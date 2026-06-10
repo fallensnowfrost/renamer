@@ -1,0 +1,62 @@
+{
+  "name": "smart-media-renamer",
+  "version": "0.1.5",
+  "private": true,
+  "description": "Offline Windows desktop client for smart media folder and file renaming.",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && electron .\"",
+    "build": "tsc && vite build",
+    "package": "npm.cmd run build && electron-builder --win portable",
+    "web": "npm.cmd run build && node server.cjs",
+    "test": "vitest run",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "build": {
+    "appId": "com.local.smart-media-renamer",
+    "productName": "Smart Renamer",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "assets/smart-renamer-icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Smart-Renamer-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Smart-Renamer-${version}-${arch}.${ext}"
+    }
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.0.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0",
+    "wait-on": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.2"
+  }
+}
