@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, FolderOpen, Play, RotateCcw, ScanLine, Wand2 } from "lucide-react";
-import { buildCleanupOperations, defaultCleanupOptions, findCommonTextCandidates, type CleanupOptions } from "./cleanup";
+import {
+  buildCleanupOperations,
+  defaultCleanupOptions,
+  findNoiseCandidates,
+  getCleanupError,
+  type CleanupAction,
+  type CleanupOptions,
+} from "./cleanup";
 import { getRenamerApi } from "./api";
 import type { ProgressState, RenameLog, RenameOperation, ScanGroup, ScanResult, SortMode } from "./types";
 import { createRoot } from "react-dom/client";
@@ -17,6 +24,17 @@ const idleProgress: ProgressState = {
   current: 0,
   total: 0,
   label: "",
+};
+
+const cleanupActions: CleanupAction[] = ["text-remove", "smart-rule", "regex-remove", "replace", "add", "trim", "noise"];
+const cleanupLabels: Record<CleanupAction, string> = {
+  "text-remove": "删除文本 / Remove text",
+  "smart-rule": "智能规则删除 / Smart rule",
+  "regex-remove": "高级正则删除 / Regex",
+  replace: "替换内容 / Replace",
+  add: "添加前后缀 / Add text",
+  trim: "删除首尾空格 / Trim spaces",
+  noise: "无用内容推荐 / Noise cleanup",
 };
 
 function App() {
@@ -36,11 +54,13 @@ function App() {
   const selectedGroup = scan?.groups.find((group) => group.id === selectedId) || scan?.groups[0] || null;
   const folderOps = useMemo(() => buildFolderOperations(scan?.groups || []), [scan]);
   const fileOps = useMemo(() => buildFileOperations(scan?.groups || []), [scan]);
-  const cleanupOps = useMemo(() => buildCleanupOperations(scan?.groups || [], cleanup), [scan, cleanup]);
-  const commonCandidates = useMemo(
-    () => findCommonTextCandidates((scan?.groups || []).map((group) => group.originalName)),
-    [scan],
+  const cleanupActionOps = useMemo(
+    () => Object.fromEntries(cleanupActions.map((action) => [action, buildCleanupOperations(scan?.groups || [], cleanup, action)])) as Record<CleanupAction, RenameOperation[]>,
+    [scan, cleanup],
   );
+  const cleanupOps = useMemo(() => cleanupActions.flatMap((action) => cleanupActionOps[action]), [cleanupActionOps]);
+  const noiseCandidates = useMemo(() => findNoiseCandidates(scan?.groups || []), [scan]);
+  const regexError = useMemo(() => getCleanupError(cleanup, "regex-remove"), [cleanup]);
   const warnings = useMemo(() => countWarnings(scan?.groups || []), [scan]);
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
@@ -118,9 +138,44 @@ function App() {
   }
 
   async function exportLog() {
-    const payload = { scan, lastLog, folderOps, fileOps, cleanupOps, exportedAt: new Date().toISOString() };
+    const payload = { scan, lastLog, folderOps, fileOps, cleanupActionOps, exportedAt: new Date().toISOString() };
     const filePath = await api.exportLog(payload);
     if (filePath) setMessage(`日志已导出 / Log exported: ${filePath}`);
+  }
+
+  function toggleNoiseText(text: string) {
+    const selected = cleanup.selectedNoiseTexts.includes(text)
+      ? cleanup.selectedNoiseTexts.filter((item) => item !== text)
+      : [...cleanup.selectedNoiseTexts, text];
+    setCleanup({ ...cleanup, selectedNoiseTexts: selected });
+  }
+
+  function renderCleanupPreview(action: CleanupAction) {
+    const operations = cleanupActionOps[action];
+    if (action === "regex-remove" && regexError) {
+      return <p className="cleanup-error">正则表达式错误 / Regex error: {regexError}</p>;
+    }
+    if (!operations.length) {
+      return <p className="cleanup-empty">没有可预览的变化 / No changes to preview.</p>;
+    }
+    return (
+      <div className="cleanup-preview-list">
+        {operations.slice(0, 5).map((operation) => (
+          <span key={operation.from}>{operation.label}</span>
+        ))}
+        {operations.length > 5 ? <em>还有{operations.length - 5}项 / more</em> : null}
+      </div>
+    );
+  }
+
+  function cleanupButton(action: CleanupAction) {
+    const operations = cleanupActionOps[action];
+    return (
+      <button onClick={() => applyOperations(operations, cleanupLabels[action])} disabled={busy || !operations.length || (action === "regex-remove" && Boolean(regexError))}>
+        <Wand2 size={16} />
+        执行 / Apply
+      </button>
+    );
   }
 
   return (
@@ -257,73 +312,149 @@ function App() {
       <section className="cleanup-panel">
         <div className="panel-heading">
           <h2>文件夹名称清理 / Folder Name Cleanup</h2>
-          <span>{cleanupOps.length} ops</span>
+          <span>{cleanupOps.length} ops / 独立清理操作</span>
         </div>
-        <div className="cleanup-grid">
-          <label>
-            删除前缀 / Remove prefix
-            <input value={cleanup.removePrefix} onChange={(event) => setCleanup({ ...cleanup, removePrefix: event.target.value })} />
-          </label>
-          <label>
-            删除后缀 / Remove suffix
-            <input value={cleanup.removeSuffix} onChange={(event) => setCleanup({ ...cleanup, removeSuffix: event.target.value })} />
-          </label>
-          <label>
-            删除包含内容 / Remove contained text
-            <input value={cleanup.removeContains} onChange={(event) => setCleanup({ ...cleanup, removeContains: event.target.value })} />
-          </label>
-          <label>
-            添加内容 / Add text
-            <input value={cleanup.addText} onChange={(event) => setCleanup({ ...cleanup, addText: event.target.value })} />
-          </label>
-          <label>
-            添加位置 / Add position
-            <select value={cleanup.addPosition} onChange={(event) => setCleanup({ ...cleanup, addPosition: event.target.value as "prefix" | "suffix" })}>
-              <option value="prefix">前缀 / Prefix</option>
-              <option value="suffix">后缀 / Suffix</option>
-            </select>
-          </label>
-          <label>
-            查找 / Find
-            <input value={cleanup.replaceFrom} onChange={(event) => setCleanup({ ...cleanup, replaceFrom: event.target.value })} />
-          </label>
-          <label>
-            替换为 / Replace with
-            <input value={cleanup.replaceTo} onChange={(event) => setCleanup({ ...cleanup, replaceTo: event.target.value })} />
-          </label>
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={cleanup.replaceCaseSensitive}
-              onChange={(event) => setCleanup({ ...cleanup, replaceCaseSensitive: event.target.checked })}
-            />
-            区分大小写 / Case sensitive
-          </label>
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={cleanup.trimOuterSpaces}
-              onChange={(event) => setCleanup({ ...cleanup, trimOuterSpaces: event.target.checked })}
-            />
-            删除前后空格 / Trim outer spaces
-          </label>
-          <label>
-            共同内容候选 / Common text
-            <select value={cleanup.selectedCommonText} onChange={(event) => setCleanup({ ...cleanup, selectedCommonText: event.target.value })}>
-              <option value="">不使用 / None</option>
-              {commonCandidates.map((candidate) => (
-                <option key={candidate} value={candidate}>
-                  {candidate}
-                </option>
+        <div className="cleanup-cards">
+          <article className="cleanup-card">
+            <div className="cleanup-card-head">
+              <h3>普通文本删除 / Remove Text</h3>
+              <strong>{cleanupActionOps["text-remove"].length} ops</strong>
+            </div>
+            <label>
+              要删除的固定文本 / Text
+              <input value={cleanup.removeText} onChange={(event) => setCleanup({ ...cleanup, removeText: event.target.value })} placeholder="DJAWA" />
+            </label>
+            {renderCleanupPreview("text-remove")}
+            {cleanupButton("text-remove")}
+          </article>
+
+          <article className="cleanup-card">
+            <div className="cleanup-card-head">
+              <h3>智能规则删除 / Smart Rule</h3>
+              <strong>{cleanupActionOps["smart-rule"].length} ops</strong>
+            </div>
+            <label>
+              选择规则 / Rule
+              <select value={cleanup.smartRule} onChange={(event) => setCleanup({ ...cleanup, smartRule: event.target.value as CleanupOptions["smartRule"] })}>
+                <option value="leading-number">删除开头编号，例如048 ARTGRAVIA...</option>
+                <option value="photo-vol">删除Photo Vol编号，例如DJAWA Photo Vol 0216</option>
+                <option value="vol-number">删除Vol编号，例如Vol 0216</option>
+                <option value="middle-number">删除中间孤立编号，例如 - 048 ARTGRAVIA</option>
+                <option value="brand-word">删除指定品牌词，例如DJAWA、BLUECAKE</option>
+              </select>
+            </label>
+            {cleanup.smartRule === "brand-word" ? (
+              <label>
+                品牌词 / Brand word
+                <input value={cleanup.smartBrandText} onChange={(event) => setCleanup({ ...cleanup, smartBrandText: event.target.value })} placeholder="DJAWA" />
+              </label>
+            ) : null}
+            {renderCleanupPreview("smart-rule")}
+            {cleanupButton("smart-rule")}
+          </article>
+
+          <article className="cleanup-card">
+            <div className="cleanup-card-head">
+              <h3>高级正则删除 / Advanced Regex</h3>
+              <strong>{cleanupActionOps["regex-remove"].length} ops</strong>
+            </div>
+            <label>
+              正则表达式 / Pattern
+              <input value={cleanup.regexRemovePattern} onChange={(event) => setCleanup({ ...cleanup, regexRemovePattern: event.target.value })} placeholder="DJAWA Photo Vol \\d+" />
+            </label>
+            <div className="regex-examples">
+              {["DJAWA Photo Vol \\d+", "^\\d{2,4}\\s+", "\\s+-\\s+\\d{2,4}\\s+"].map((pattern) => (
+                <button key={pattern} type="button" onClick={() => setCleanup({ ...cleanup, regexRemovePattern: pattern })}>
+                  {pattern}
+                </button>
               ))}
-            </select>
-          </label>
-        </div>
-        <div className="cleanup-preview">
-          {cleanupOps.slice(0, 5).map((operation) => (
-            <span key={operation.from}>{operation.label}</span>
-          ))}
-          {cleanupOps.length > 5 ? <span>还有{cleanupOps.length - 5}项 / more</span> : null}
+            </div>
+            <label className="check-row compact">
+              <input type="checkbox" checked={cleanup.regexCaseSensitive} onChange={(event) => setCleanup({ ...cleanup, regexCaseSensitive: event.target.checked })} />
+              区分大小写 / Case sensitive
+            </label>
+            <p className="hint">\\d+表示数字，^表示开头，\\s+表示空格。不会正则时请优先用智能规则。</p>
+            {renderCleanupPreview("regex-remove")}
+            {cleanupButton("regex-remove")}
+          </article>
+
+          <article className="cleanup-card">
+            <div className="cleanup-card-head">
+              <h3>替换内容 / Replace</h3>
+              <strong>{cleanupActionOps.replace.length} ops</strong>
+            </div>
+            <label>
+              查找 / Find
+              <input value={cleanup.replaceFrom} onChange={(event) => setCleanup({ ...cleanup, replaceFrom: event.target.value })} />
+            </label>
+            <label>
+              替换为 / Replace with
+              <input value={cleanup.replaceTo} onChange={(event) => setCleanup({ ...cleanup, replaceTo: event.target.value })} />
+            </label>
+            <label className="check-row compact">
+              <input type="checkbox" checked={cleanup.replaceCaseSensitive} onChange={(event) => setCleanup({ ...cleanup, replaceCaseSensitive: event.target.checked })} />
+              区分大小写 / Case sensitive
+            </label>
+            {renderCleanupPreview("replace")}
+            {cleanupButton("replace")}
+          </article>
+
+          <article className="cleanup-card">
+            <div className="cleanup-card-head">
+              <h3>添加前后缀 / Add Text</h3>
+              <strong>{cleanupActionOps.add.length} ops</strong>
+            </div>
+            <label>
+              添加内容 / Text
+              <input value={cleanup.addText} onChange={(event) => setCleanup({ ...cleanup, addText: event.target.value })} />
+            </label>
+            <label>
+              添加位置 / Position
+              <select value={cleanup.addPosition} onChange={(event) => setCleanup({ ...cleanup, addPosition: event.target.value as "prefix" | "suffix" })}>
+                <option value="prefix">前缀 / Prefix</option>
+                <option value="suffix">后缀 / Suffix</option>
+              </select>
+            </label>
+            {renderCleanupPreview("add")}
+            {cleanupButton("add")}
+          </article>
+
+          <article className="cleanup-card">
+            <div className="cleanup-card-head">
+              <h3>删除首尾空格 / Trim Spaces</h3>
+              <strong>{cleanupActionOps.trim.length} ops</strong>
+            </div>
+            <label className="check-row compact">
+              <input type="checkbox" checked={cleanup.trimOuterSpaces} onChange={(event) => setCleanup({ ...cleanup, trimOuterSpaces: event.target.checked })} />
+              只删除文件夹名称开头和结尾的空白 / Trim outer spaces only
+            </label>
+            {renderCleanupPreview("trim")}
+            {cleanupButton("trim")}
+          </article>
+
+          <article className="cleanup-card wide">
+            <div className="cleanup-card-head">
+              <h3>无用内容推荐 / Suggested Noise</h3>
+              <strong>{cleanupActionOps.noise.length} ops</strong>
+            </div>
+            <div className="noise-list">
+              {noiseCandidates.length ? (
+                noiseCandidates.map((candidate) => (
+                  <label key={candidate.id} className="noise-option">
+                    <input type="checkbox" checked={cleanup.selectedNoiseTexts.includes(candidate.text)} onChange={() => toggleNoiseText(candidate.text)} />
+                    <span>
+                      <b>{candidate.text}</b>
+                      <em>{candidate.reason} · {candidate.count}项 · 示例：{candidate.example}</em>
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <p className="cleanup-empty">扫描后会推荐DJAWA Photo Vol编号、开头048这类疑似无用内容。</p>
+              )}
+            </div>
+            {renderCleanupPreview("noise")}
+            {cleanupButton("noise")}
+          </article>
         </div>
       </section>
 
@@ -335,10 +466,6 @@ function App() {
         <button onClick={() => applyOperations(fileOps, "重命名文件 / Rename files")} disabled={busy || !fileOps.length}>
           <Play size={16} />
           重命名文件 / Rename files
-        </button>
-        <button onClick={() => applyOperations(cleanupOps, "文本清理 / Text cleanup")} disabled={busy || !cleanupOps.length}>
-          <Wand2 size={16} />
-          应用文本清理 / Apply cleanup
         </button>
         <button onClick={undo} disabled={busy || !lastLog}>
           <RotateCcw size={16} />

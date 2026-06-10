@@ -370,11 +370,45 @@ label {
   padding-bottom: 12px;
 }
 
-.cleanup-grid {
+.cleanup-cards {
   padding: 12px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
   gap: 12px;
+}
+
+.cleanup-card {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid #edf0f2;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfc;
+}
+
+.cleanup-card.wide {
+  grid-column: 1 / -1;
+}
+
+.cleanup-card-head {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cleanup-card-head h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.cleanup-card-head strong {
+  color: #0f8f8b;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .check-row {
@@ -390,16 +424,48 @@ label {
   height: 16px;
 }
 
-.cleanup-preview {
-  min-height: 30px;
-  padding: 0 12px;
-  display: flex;
-  gap: 8px;
-  overflow: hidden;
+.check-row.compact {
+  min-height: 24px;
+  padding-top: 0;
 }
 
-.cleanup-preview span {
-  max-width: 260px;
+.regex-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.regex-examples button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.hint,
+.cleanup-empty,
+.cleanup-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hint,
+.cleanup-empty {
+  color: #6b767c;
+}
+
+.cleanup-error {
+  color: #b42318;
+}
+
+.cleanup-preview-list {
+  min-height: 30px;
+  display: grid;
+  gap: 6px;
+}
+
+.cleanup-preview-list span,
+.cleanup-preview-list em {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -408,6 +474,57 @@ label {
   padding: 5px 8px;
   font-size: 12px;
   color: #344149;
+  background: #ffffff;
+}
+
+.cleanup-preview-list em {
+  color: #6b767c;
+  font-style: normal;
+}
+
+.noise-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.noise-option {
+  grid-template-columns: 18px 1fr;
+  align-items: start;
+  gap: 8px;
+  border: 1px solid #edf0f2;
+  border-radius: 6px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.noise-option input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.noise-option span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.noise-option b,
+.noise-option em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noise-option b {
+  color: #182126;
+}
+
+.noise-option em {
+  color: #6b767c;
+  font-style: normal;
+  font-weight: 500;
 }
 
 .command-bar {
