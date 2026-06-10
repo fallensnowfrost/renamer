@@ -152,4 +152,4 @@ SHA256：
 
 ## 许可证
 
-当前仓库尚未声明开源许可证。发布到GitHub前，请根据你的使用方式补充`LICENSE`文件。
+本项目使用MIT License，详见[LICENSE](LICENSE)。
