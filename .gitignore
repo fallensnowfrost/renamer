@@ -5,6 +5,15 @@ node_modules/
 dist/
 release/
 APP/**/*.exe
+werenameit/APP/**/*.exe
+archive/**/*.exe
+werenameit/dist/
+werenameit/release/
+werenameit/node_modules/
+werenameit/.npm-cache/
+werenameit/.electron-cache/
+archive/**/app/
+archive/**/duplicate-src-from-migration/
 
 # Local caches
 .npm-cache/
