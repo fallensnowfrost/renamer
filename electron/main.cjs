@@ -472,11 +472,11 @@ async function prepareOperations(operations) {
 
 function orderOperations(operations) {
   return [...operations].sort((a, b) => {
-    if (a.kind === b.kind && a.kind === "folder") {
+    if (a.kind === b.kind && a.kind !== "file") {
       return b.from.length - a.from.length;
     }
-    if (a.kind === "file" && b.kind === "folder") return -1;
-    if (a.kind === "folder" && b.kind === "file") return 1;
+    if (a.kind === "file" && b.kind !== "file") return -1;
+    if (a.kind !== "file" && b.kind === "file") return 1;
     return a.from.localeCompare(b.from);
   });
 }

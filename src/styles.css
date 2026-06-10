@@ -13,8 +13,14 @@
 body {
   margin: 0;
   min-width: 1180px;
+  height: 100vh;
   min-height: 720px;
+  overflow: hidden;
   background: #f6f7f8;
+}
+
+#root {
+  height: 100%;
 }
 
 button,
@@ -66,11 +72,13 @@ label {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto 1fr auto auto;
-  gap: 12px;
-  padding: 16px 16px 20px;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) minmax(190px, 260px) auto;
+  gap: 10px;
+  padding: 12px 16px;
+  overflow: hidden;
 }
 
 .topbar,
@@ -86,8 +94,8 @@ label {
 }
 
 .topbar {
-  min-height: 76px;
-  padding: 16px 18px;
+  min-height: 64px;
+  padding: 12px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -126,7 +134,7 @@ label {
   display: grid;
   grid-template-columns: 1fr 220px 260px;
   gap: 12px;
-  padding: 12px;
+  padding: 10px 12px;
 }
 
 .status-strip {
@@ -219,6 +227,7 @@ label {
 
 .workspace {
   min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(720px, 1fr) 380px;
   gap: 12px;
@@ -249,9 +258,10 @@ label {
 }
 
 .table {
+  min-height: 0;
   height: calc(100% - 48px);
   display: grid;
-  grid-template-rows: 38px 1fr;
+  grid-template-rows: 38px minmax(0, 1fr);
 }
 
 .table-head,
@@ -271,6 +281,7 @@ label {
 }
 
 .table-body {
+  min-height: 0;
   overflow: auto;
 }
 
@@ -298,6 +309,7 @@ label {
 
 .inspector {
   padding-bottom: 14px;
+  overflow: auto;
 }
 
 .info-grid {
@@ -367,24 +379,27 @@ label {
 }
 
 .cleanup-panel {
-  padding-bottom: 12px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .cleanup-cards {
-  padding: 12px;
+  height: calc(100% - 48px);
+  padding: 10px 12px;
   display: grid;
   grid-template-columns: repeat(3, minmax(260px, 1fr));
-  gap: 12px;
+  gap: 10px;
+  overflow: auto;
 }
 
 .cleanup-card {
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid #edf0f2;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   background: #fbfcfc;
 }
 
@@ -459,9 +474,11 @@ label {
 }
 
 .cleanup-preview-list {
-  min-height: 30px;
+  min-height: 28px;
+  max-height: 92px;
   display: grid;
   gap: 6px;
+  overflow: hidden;
 }
 
 .cleanup-preview-list span,
@@ -486,6 +503,8 @@ label {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 8px;
+  max-height: 116px;
+  overflow: auto;
 }
 
 .noise-option {
@@ -533,8 +552,6 @@ label {
   display: flex;
   align-items: center;
   gap: 10px;
-  position: sticky;
-  bottom: 12px;
   z-index: 20;
   box-shadow: 0 10px 30px rgba(24, 33, 38, 0.16);
 }
