@@ -1,8 +1,25 @@
-# werenameit 0.2.0-alpha.1未发布说明
+# werenameit 0.2.0-alpha.1本地包说明
 
-这是werenameit的未发布版本说明目录，当前还不是正式发布包。
+这是werenameit的未发布版本本地包目录。
 
-## 计划发布结构
+## 本地打开
+
+双击下面这个文件即可打开程序：
+
+```text
+APP\werenameit_0.2.0-alpha.1_Windows_x64\werenameit.exe
+```
+
+外层`werenameit.exe`是小启动器，真实Electron运行文件放在同级`app\`目录中。使用时请保持`werenameit.exe`和`app\`在同一个文件夹内。
+
+## 当前状态
+
+- 版本：0.2.0-alpha.1
+- 状态：未发布版本 / Unreleased
+- 平台：Windows x64
+- 包类型：文件夹式本地包
+
+## 包结构
 
 ```text
 werenameit_0.2.0-alpha.1_Windows_x64/
@@ -12,18 +29,9 @@ werenameit_0.2.0-alpha.1_Windows_x64/
   README_zh-CN.md
 ```
 
-外层`werenameit.exe`将作为小启动器，用户双击它即可打开程序。
-
-## 当前状态
-
-- 版本：0.2.0-alpha.1
-- 状态：未发布版本 / Unreleased
-- 平台：Windows x64
-- 正式exe尚未生成
-
 ## 文档
 
-- `docs/UserGuide_zh-CN.md`：用户手册。
-- `docs/ReleaseNotes_0.2.0-alpha.1_zh-CN.md`：未发布版本说明。
-- `docs/FileManifest_0.2.0-alpha.1.md`：计划发布文件清单。
-- `docs/Checksums_SHA256.md`：正式打包后填写校验信息。
+- `docs\UserGuide_zh-CN.md`：用户手册
+- `docs\ReleaseNotes_0.2.0-alpha.1_zh-CN.md`：未发布版本说明
+- `docs\FileManifest_0.2.0-alpha.1.md`：文件清单
+- `docs\Checksums_SHA256.md`：校验信息

@@ -1,5 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Download, FolderOpen, Play, RotateCcw, ScanLine, Wand2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Eraser,
+  FolderOpen,
+  ListChecks,
+  Play,
+  Plus,
+  Replace,
+  RotateCcw,
+  ScanLine,
+  Scissors,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
 import {
   buildCleanupOperations,
   defaultCleanupOptions,
@@ -13,12 +28,6 @@ import type { ProgressState, RenameLog, RenameOperation, ScanGroup, ScanResult, 
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-const statusLabel = {
-  ready: "å°±ç»ª / Ready",
-  warning: "è­¦å‘Š / Warning",
-  unchanged: "æ— å˜åŒ– / Unchanged",
-};
-
 const idleProgress: ProgressState = {
   phase: "idle",
   current: 0,
@@ -27,14 +36,23 @@ const idleProgress: ProgressState = {
 };
 
 const cleanupActions: CleanupAction[] = ["text-remove", "smart-rule", "regex-remove", "replace", "add", "trim", "noise"];
+
 const cleanupLabels: Record<CleanupAction, string> = {
-  "text-remove": "åˆ é™¤æ–‡æœ¬ / Remove text",
-  "smart-rule": "æ™ºèƒ½è§„åˆ™åˆ é™¤ / Smart rule",
-  "regex-remove": "é«˜çº§æ­£åˆ™åˆ é™¤ / Regex",
-  replace: "æ›¿æ¢å†…å®¹ / Replace",
-  add: "æ·»åŠ å‰åŽç¼€ / Add text",
-  trim: "åˆ é™¤é¦–å°¾ç©ºæ ¼ / Trim spaces",
-  noise: "æ— ç”¨å†…å®¹æŽ¨è / Noise cleanup",
+  "text-remove": "普通文本删除",
+  "smart-rule": "智能规则删除",
+  "regex-remove": "高级正则删除",
+  replace: "替换内容",
+  add: "添加前缀后缀",
+  trim: "删除首尾空格",
+  noise: "无用内容推荐",
+};
+
+const smartRuleLabels: Record<CleanupOptions["smartRule"], string> = {
+  "leading-number": "删除开头编号，如048 ARTGRAVIA...",
+  "photo-vol": "删除Photo Vol编号，如DJAWA Photo Vol 0216",
+  "vol-number": "删除Vol编号，如Vol 0216",
+  "middle-number": "删除中间孤立编号，如- 048 ARTGRAVIA",
+  "brand-word": "删除指定品牌词，如DJAWA、BLUECAKE",
 };
 
 function App() {
@@ -44,25 +62,27 @@ function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [cleanup, setCleanup] = useState<CleanupOptions>(defaultCleanupOptions);
-  const [themeOverrides, setThemeOverrides] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("è¯·é€‰æ‹©æ ¹æ–‡ä»¶å¤¹ï¼›äººç‰©åç§°åªåœ¨æ–‡ä»¶å¤¹å‰ç¼€æ¸…ç†æ—¶éœ€è¦ / Select a root folder. Person name is only needed for folder prefix cleanup.");
+  const [message, setMessage] = useState("选择根文件夹后即可扫描。人物名称只用于文件夹前缀和主题清理，重命名文件不需要填写人物名称。");
   const [lastLog, setLastLog] = useState<RenameLog | null>(null);
   const [progress, setProgress] = useState<ProgressState>(idleProgress);
+  const [sideTab, setSideTab] = useState<"inspector" | "cleanup">("inspector");
   const api = useMemo(() => getRenamerApi(), []);
 
-  const selectedGroup = scan?.groups.find((group) => group.id === selectedId) || scan?.groups[0] || null;
-  const folderOps = useMemo(() => buildFolderOperations(scan?.groups || []), [scan]);
-  const fileOps = useMemo(() => buildFileOperations(scan?.groups || []), [scan]);
+  const groups = scan?.groups || [];
+  const selectedGroup = groups.find((group) => group.id === selectedId) || groups[0] || null;
+  const folderOps = useMemo(() => buildFolderOperations(groups), [groups]);
+  const fileOps = useMemo(() => buildFileOperations(groups), [groups]);
   const cleanupActionOps = useMemo(
-    () => Object.fromEntries(cleanupActions.map((action) => [action, buildCleanupOperations(scan?.groups || [], cleanup, action)])) as Record<CleanupAction, RenameOperation[]>,
-    [scan, cleanup],
+    () => Object.fromEntries(cleanupActions.map((action) => [action, buildCleanupOperations(groups, cleanup, action)])) as Record<CleanupAction, RenameOperation[]>,
+    [groups, cleanup],
   );
-  const cleanupOps = useMemo(() => cleanupActions.flatMap((action) => cleanupActionOps[action]), [cleanupActionOps]);
-  const noiseCandidates = useMemo(() => findNoiseCandidates(scan?.groups || []), [scan]);
+  const noiseCandidates = useMemo(() => findNoiseCandidates(groups), [groups]);
   const regexError = useMemo(() => getCleanupError(cleanup, "regex-remove"), [cleanup]);
-  const warnings = useMemo(() => countWarnings(scan?.groups || []), [scan]);
+  const warningCount = useMemo(() => countWarnings(groups), [groups]);
+  const mediaCount = useMemo(() => groups.reduce((sum, group) => sum + group.files.length, 0), [groups]);
   const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+  const progressVisible = busy || progress.phase !== "idle";
 
   useEffect(() => {
     if (!api.onProgress) return undefined;
@@ -75,19 +95,18 @@ function App() {
   }
 
   async function runScan() {
-    if (!rootPath) {
-      setMessage("è¯·å…ˆé€‰æ‹©æ ¹æ–‡ä»¶å¤¹ / Choose a root folder first.");
+    if (!rootPath.trim()) {
+      setMessage("请先选择或输入根文件夹路径。");
       return;
     }
     setBusy(true);
-    setProgress({ phase: "indeterminate", current: 0, total: 0, label: "æ­£åœ¨æ‰«æ / Scanning..." });
+    setProgress({ phase: "indeterminate", current: 0, total: 0, label: "正在扫描..." });
     try {
       const result = await api.scan({ rootPath, personName, sortMode });
       setScan(result);
-      setThemeOverrides(Object.fromEntries(result.groups.map((group) => [group.id, group.theme])));
       setSelectedId(result.groups[0]?.id || "");
-      setMessage(`æ‰«æå®Œæˆï¼š${result.groups.length}ä¸ªå­æ–‡ä»¶å¤¹ / Scan complete: ${result.groups.length} folders.`);
-      setProgress({ phase: "complete", current: result.groups.length, total: result.groups.length, label: "æ‰«æå®Œæˆ / Scan complete" });
+      setMessage(`扫描完成：${result.groups.length}个子文件夹，${result.groups.reduce((sum, group) => sum + group.files.length, 0)}个媒体文件。`);
+      setProgress({ phase: "complete", current: result.groups.length, total: result.groups.length, label: "扫描完成" });
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
@@ -97,12 +116,12 @@ function App() {
 
   async function applyOperations(operations: RenameOperation[], label: string) {
     if (!operations.length) {
-      setMessage("æ²¡æœ‰éœ€è¦æ‰§è¡Œçš„é¡¹ç›® / Nothing to apply.");
+      setMessage("没有需要执行的项目。");
       return;
     }
     const runnableOperations = operations.filter((operation) => operation.from !== operation.to);
     if (!runnableOperations.length) {
-      setMessage("æ²¡æœ‰éœ€è¦æ‰§è¡Œçš„æœ‰æ•ˆé¡¹ç›® / No runnable operations.");
+      setMessage("没有需要执行的有效项目。");
       return;
     }
     setBusy(true);
@@ -111,8 +130,8 @@ function App() {
       const log = await api.apply({ operations: runnableOperations });
       setLastLog(log);
       const skipped = log.skipped?.length || 0;
-      setMessage(`${label}å®Œæˆï¼š${log.operations.length}é¡¹ï¼Œè·³è¿‡${skipped}é¡¹ / ${label} complete: ${log.operations.length}, skipped: ${skipped}.`);
-      setProgress({ phase: "complete", current: log.operations.length, total: runnableOperations.length, label: "æ‰§è¡Œå®Œæˆ / Apply complete" });
+      setMessage(`${label}完成：成功${log.operations.length}项，跳过${skipped}项。`);
+      setProgress({ phase: "complete", current: log.operations.length, total: runnableOperations.length, label: `${label}完成` });
       await runScan();
     } catch (error) {
       setMessage(errorMessage(error));
@@ -123,12 +142,12 @@ function App() {
 
   async function undo() {
     setBusy(true);
-    setProgress({ phase: "indeterminate", current: 0, total: 0, label: "æ­£åœ¨æ’¤é”€ / Undoing..." });
+    setProgress({ phase: "indeterminate", current: 0, total: 0, label: "正在撤销..." });
     try {
       const log = await api.undo();
       setLastLog(null);
-      setMessage(`å·²æ’¤é”€ï¼š${log.operations.length}é¡¹ / Undo complete.`);
-      setProgress({ phase: "complete", current: log.operations.length, total: log.operations.length, label: "æ’¤é”€å®Œæˆ / Undo complete" });
+      setMessage(`已撤销：${log.operations.length}项。`);
+      setProgress({ phase: "complete", current: log.operations.length, total: log.operations.length, label: "撤销完成" });
       await runScan();
     } catch (error) {
       setMessage(errorMessage(error));
@@ -140,7 +159,7 @@ function App() {
   async function exportLog() {
     const payload = { scan, lastLog, folderOps, fileOps, cleanupActionOps, exportedAt: new Date().toISOString() };
     const filePath = await api.exportLog(payload);
-    if (filePath) setMessage(`æ—¥å¿—å·²å¯¼å‡º / Log exported: ${filePath}`);
+    if (filePath) setMessage(`日志已导出：${filePath}`);
   }
 
   function toggleNoiseText(text: string) {
@@ -153,330 +172,359 @@ function App() {
   function renderCleanupPreview(action: CleanupAction) {
     const operations = cleanupActionOps[action];
     if (action === "regex-remove" && regexError) {
-      return <p className="cleanup-error">æ­£åˆ™è¡¨è¾¾å¼é”™è¯¯ / Regex error: {regexError}</p>;
+      return <p className="cleanup-error">正则表达式错误：{regexError}</p>;
     }
     if (!operations.length) {
-      return <p className="cleanup-empty">æ²¡æœ‰å¯é¢„è§ˆçš„å˜åŒ– / No changes to preview.</p>;
+      return <p className="cleanup-empty">暂无可预览的变化。</p>;
     }
     return (
-      <div className="cleanup-preview-list">
+      <div className="preview-stack">
         {operations.slice(0, 5).map((operation) => (
-          <span key={operation.from}>{operation.label}</span>
+          <span key={`${action}-${operation.from}`}>{operation.label}</span>
         ))}
-        {operations.length > 5 ? <em>è¿˜æœ‰{operations.length - 5}é¡¹ / more</em> : null}
+        {operations.length > 5 ? <em>还有{operations.length - 5}项</em> : null}
       </div>
     );
   }
 
   function cleanupButton(action: CleanupAction) {
     const operations = cleanupActionOps[action];
+    const disabled = busy || !operations.length || (action === "regex-remove" && Boolean(regexError));
     return (
-      <button onClick={() => applyOperations(operations, cleanupLabels[action])} disabled={busy || !operations.length || (action === "regex-remove" && Boolean(regexError))}>
-        <Wand2 size={16} />
-        æ‰§è¡Œ / Apply
+      <button className="compact-action" onClick={() => applyOperations(operations, cleanupLabels[action])} disabled={disabled}>
+        <Wand2 size={15} />
+        预览无误，执行
       </button>
     );
   }
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <h1>werenameit / Unreleased</h1>
-          <p>ç¦»çº¿æ‰¹é‡æ•´ç†äººç‰©ç›®å½•ä¸‹çš„å›¾ç‰‡å’Œè§†é¢‘ / Offline media folder organizer</p>
+      <header className="app-header">
+        <div className="brand-block">
+          <span className="brand-mark">we</span>
+          <div>
+            <h1>werenameit</h1>
+            <p>0.2.0-alpha.1未发布版本 · 离线媒体批量重命名工具</p>
+          </div>
         </div>
-        <div className="top-actions">
-          <button className="icon-button" onClick={chooseFolder} title="é€‰æ‹©æ–‡ä»¶å¤¹ / Select folder">
+        <div className="header-actions">
+          <button className="ghost-button" onClick={chooseFolder} title="选择文件夹">
             <FolderOpen size={18} />
           </button>
-          <button className="primary" onClick={runScan} disabled={busy}>
+          <button className="primary-button" onClick={runScan} disabled={busy || !rootPath.trim()}>
             <ScanLine size={16} />
-            æ‰«æ / Scan
+            扫描
           </button>
         </div>
       </header>
 
-      <section className="control-band">
-        <label>
-          æ ¹æ–‡ä»¶å¤¹ / Root folder
-          <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder="E:\\Media\\å¼ ä¸‰" />
-        </label>
-        <label>
-          äººç‰©åç§° / Person
-          <input value={personName} onChange={(event) => setPersonName(event.target.value)} placeholder="å¯é€‰ï¼Œç”¨äºŽæ–‡ä»¶å¤¹å‰ç¼€ / Optional" />
-        </label>
-        <label>
-          æŽ’åº / Sorting
+      <section className="control-deck">
+        <div className="field root-field">
+          <label>根文件夹</label>
+          <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder="E:\Media\Person" />
+        </div>
+        <div className="field">
+          <label>人物名称</label>
+          <input value={personName} onChange={(event) => setPersonName(event.target.value)} placeholder="可选，仅文件夹用" />
+        </div>
+        <div className="field">
+          <label>文件排序</label>
           <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
-            <option value="natural">æ–‡ä»¶åè‡ªç„¶æŽ’åº / Natural</option>
-            <option value="modified">ä¿®æ”¹æ—¶é—´ / Modified time</option>
-            <option value="created">åˆ›å»ºæ—¶é—´ / Created time</option>
+            <option value="natural">文件名自然排序</option>
+            <option value="modified">修改时间排序</option>
+            <option value="created">创建时间排序</option>
           </select>
-        </label>
-      </section>
-
-      <section className="status-strip">
-        <span>{message}</span>
-        <strong>{scan ? `${scan.groups.length} folders / æ–‡ä»¶å¤¹` : "No scan / æœªæ‰«æ"}</strong>
-        <strong>{folderOps.length} folder ops / æ–‡ä»¶å¤¹æ“ä½œ</strong>
-        <strong>{fileOps.length} file ops / æ–‡ä»¶æ“ä½œ</strong>
-        <strong className={warnings ? "warn" : "ok"}>{warnings} warnings / è­¦å‘Š</strong>
-      </section>
-
-      <section className={`progress-panel ${busy || progress.phase !== "idle" ? "visible" : ""}`}>
-        <div className="progress-meta">
-          <strong>{progress.label || "ç­‰å¾…æ“ä½œ / Idle"}</strong>
-          <span>{progress.total > 0 ? `${progress.current}/${progress.total} (${progressPercent}%)` : busy ? "å¤„ç†ä¸­ / Working" : "Ready"}</span>
-        </div>
-        <div className={`progress-track ${progress.total > 0 ? "" : "indeterminate"}`}>
-          <div className="progress-fill" style={{ width: progress.total > 0 ? `${Math.min(progressPercent, 100)}%` : "34%" }} />
         </div>
       </section>
 
-      <section className="workspace">
-        <div className="panel list-panel">
-          <div className="panel-heading">
-            <h2>æ–‡ä»¶å¤¹é¢„è§ˆ / Folder Preview</h2>
-            <span>{statusLabel[selectedGroup?.status || "unchanged"]}</span>
+      <section className="command-deck">
+        <div className="message-line">
+          <strong>{message}</strong>
+          <span>{groups.length ? `${groups.length}个文件夹 · ${mediaCount}个媒体文件 · ${warningCount}个警告` : "等待扫描"}</span>
+        </div>
+        <div className="progress-box">
+          <div className="progress-copy">
+            <span>{progressVisible ? progress.label || "正在处理" : "空闲"}</span>
+            <b>{progress.total > 0 ? `${progress.current}/${progress.total}(${progressPercent}%)` : busy ? "处理中" : "Ready"}</b>
           </div>
-          <div className="table folder-table">
-            <div className="table-head">
-              <span>åŽŸåç§° / Original</span>
-              <span>ä¸»é¢˜ / Theme</span>
-              <span>ç»Ÿè®¡ / Stats</span>
-              <span>ç›®æ ‡ / Target</span>
-            </div>
-            <div className="table-body">
-              {(scan?.groups || []).map((group) => (
-                <button
-                  key={group.id}
-                  className={`row-button ${selectedGroup?.id === group.id ? "selected" : ""}`}
-                  onClick={() => setSelectedId(group.id)}
-                >
-                  <span style={{ paddingLeft: `${Math.max(group.depth - 1, 0) * 16}px` }}>{group.originalName}</span>
-                  <span>{group.theme}</span>
-                  <span>{group.folderStats.suffix || "æ— åª’ä½“ / No media"}</span>
-                  <span>{group.targetFolderName}</span>
-                </button>
-              ))}
-            </div>
+          <div className={`progress-track ${progress.total > 0 ? "" : "indeterminate"}`}>
+            <div className="progress-fill" style={{ width: progress.total > 0 ? `${Math.min(progressPercent, 100)}%` : "36%" }} />
           </div>
         </div>
-
-        <aside className="panel inspector">
-          <div className="panel-heading">
-            <h2>è¯¦æƒ… / Inspector</h2>
-            <Wand2 size={18} />
-          </div>
-          {selectedGroup ? (
-            <>
-              <div className="info-grid">
-                <span>è·¯å¾„ / Path</span>
-                <b>{selectedGroup.path}</b>
-                <span>ä¸»é¢˜ / Theme</span>
-                <b>{themeOverrides[selectedGroup.id] || selectedGroup.theme}</b>
-                <span>å›¾ç‰‡ / Photos</span>
-                <b>{selectedGroup.folderStats.imageCount}P</b>
-                <span>è§†é¢‘ / Videos</span>
-                <b>{selectedGroup.folderStats.videoCount}V</b>
-                <span>æ–‡ä»¶ / Files</span>
-                <b>{selectedGroup.files.length}</b>
-              </div>
-              <div className="warnings">
-                {selectedGroup.warnings.length ? selectedGroup.warnings.map((warning) => <p key={warning}>{warning}</p>) : <p>æ— è­¦å‘Š / No warnings</p>}
-              </div>
-              <label className="stacked-label">
-                ä¿®æ­£ä¸»é¢˜ / Edit theme
-                <input
-                  value={themeOverrides[selectedGroup.id] || selectedGroup.theme}
-                  onChange={(event) => setThemeOverrides({ ...themeOverrides, [selectedGroup.id]: event.target.value })}
-                />
-              </label>
-              <h3>å½“å‰å±‚æ–‡ä»¶é¢„è§ˆ / Direct File Preview</h3>
-              <div className="mini-list">
-                {selectedGroup.files.slice(0, 8).map((file) => (
-                  <div key={file.path}>
-                    <span>{file.name}</span>
-                    <strong>{file.targetName}</strong>
-                  </div>
-                ))}
-                {selectedGroup.files.length > 8 ? <em>è¿˜æœ‰{selectedGroup.files.length - 8}é¡¹ / more items</em> : null}
-              </div>
-            </>
-          ) : (
-            <p className="empty">æ‰«æåŽé€‰æ‹©ä¸€ä¸ªæ–‡ä»¶å¤¹ / Scan and select a folder.</p>
-          )}
-        </aside>
+        <div className="operation-buttons">
+          <button onClick={() => applyOperations(folderOps, "重命名文件夹")} disabled={busy || !folderOps.length}>
+            <CheckCircle2 size={16} />
+            重命名文件夹
+            <b>{folderOps.length}</b>
+          </button>
+          <button onClick={() => applyOperations(fileOps, "重命名文件")} disabled={busy || !fileOps.length}>
+            <Play size={16} />
+            重命名文件
+            <b>{fileOps.length}</b>
+          </button>
+          <button onClick={undo} disabled={busy || !lastLog}>
+            <RotateCcw size={16} />
+            撤销上次
+          </button>
+          <button onClick={exportLog} disabled={busy || !scan}>
+            <Download size={16} />
+            导出日志
+          </button>
+        </div>
       </section>
 
-      <section className="cleanup-panel">
-        <div className="panel-heading">
-          <h2>æ–‡ä»¶å¤¹åç§°æ¸…ç† / Folder Name Cleanup</h2>
-          <span>{cleanupOps.length} ops / ç‹¬ç«‹æ¸…ç†æ“ä½œ</span>
-        </div>
-        <div className="cleanup-cards">
-          <article className="cleanup-card">
-            <div className="cleanup-card-head">
-              <h3>æ™®é€šæ–‡æœ¬åˆ é™¤ / Remove Text</h3>
-              <strong>{cleanupActionOps["text-remove"].length} ops</strong>
+      <section className="workbench">
+        <section className="folder-panel">
+          <div className="panel-title">
+            <div>
+              <h2>文件夹预览</h2>
+              <p>只有此列表滚动，顶部操作和右侧工具保持可见。</p>
             </div>
-            <label>
-              è¦åˆ é™¤çš„å›ºå®šæ–‡æœ¬ / Text
-              <input value={cleanup.removeText} onChange={(event) => setCleanup({ ...cleanup, removeText: event.target.value })} placeholder="DJAWA" />
-            </label>
-            {renderCleanupPreview("text-remove")}
-            {cleanupButton("text-remove")}
-          </article>
-
-          <article className="cleanup-card">
-            <div className="cleanup-card-head">
-              <h3>æ™ºèƒ½è§„åˆ™åˆ é™¤ / Smart Rule</h3>
-              <strong>{cleanupActionOps["smart-rule"].length} ops</strong>
+            <div className="summary-pills">
+              <span>{folderOps.length}个文件夹操作</span>
+              <span>{fileOps.length}个文件操作</span>
+              <span className={warningCount ? "warn-pill" : ""}>{warningCount}个警告</span>
             </div>
-            <label>
-              é€‰æ‹©è§„åˆ™ / Rule
-              <select value={cleanup.smartRule} onChange={(event) => setCleanup({ ...cleanup, smartRule: event.target.value as CleanupOptions["smartRule"] })}>
-                <option value="leading-number">åˆ é™¤å¼€å¤´ç¼–å·ï¼Œä¾‹å¦‚048 ARTGRAVIA...</option>
-                <option value="photo-vol">åˆ é™¤Photo Volç¼–å·ï¼Œä¾‹å¦‚DJAWA Photo Vol 0216</option>
-                <option value="vol-number">åˆ é™¤Volç¼–å·ï¼Œä¾‹å¦‚Vol 0216</option>
-                <option value="middle-number">åˆ é™¤ä¸­é—´å­¤ç«‹ç¼–å·ï¼Œä¾‹å¦‚ - 048 ARTGRAVIA</option>
-                <option value="brand-word">åˆ é™¤æŒ‡å®šå“ç‰Œè¯ï¼Œä¾‹å¦‚DJAWAã€BLUECAKE</option>
-              </select>
-            </label>
-            {cleanup.smartRule === "brand-word" ? (
-              <label>
-                å“ç‰Œè¯ / Brand word
-                <input value={cleanup.smartBrandText} onChange={(event) => setCleanup({ ...cleanup, smartBrandText: event.target.value })} placeholder="DJAWA" />
-              </label>
-            ) : null}
-            {renderCleanupPreview("smart-rule")}
-            {cleanupButton("smart-rule")}
-          </article>
-
-          <article className="cleanup-card">
-            <div className="cleanup-card-head">
-              <h3>é«˜çº§æ­£åˆ™åˆ é™¤ / Advanced Regex</h3>
-              <strong>{cleanupActionOps["regex-remove"].length} ops</strong>
+          </div>
+          <div className="folder-table">
+            <div className="folder-row table-head">
+              <span>原名称</span>
+              <span>主题</span>
+              <span>统计</span>
+              <span>目标名称</span>
             </div>
-            <label>
-              æ­£åˆ™è¡¨è¾¾å¼ / Pattern
-              <input value={cleanup.regexRemovePattern} onChange={(event) => setCleanup({ ...cleanup, regexRemovePattern: event.target.value })} placeholder="DJAWA Photo Vol \\d+" />
-            </label>
-            <div className="regex-examples">
-              {["DJAWA Photo Vol \\d+", "^\\d{2,4}\\s+", "\\s+-\\s+\\d{2,4}\\s+"].map((pattern) => (
-                <button key={pattern} type="button" onClick={() => setCleanup({ ...cleanup, regexRemovePattern: pattern })}>
-                  {pattern}
-                </button>
-              ))}
-            </div>
-            <label className="check-row compact">
-              <input type="checkbox" checked={cleanup.regexCaseSensitive} onChange={(event) => setCleanup({ ...cleanup, regexCaseSensitive: event.target.checked })} />
-              åŒºåˆ†å¤§å°å†™ / Case sensitive
-            </label>
-            <p className="hint">\\d+è¡¨ç¤ºæ•°å­—ï¼Œ^è¡¨ç¤ºå¼€å¤´ï¼Œ\\s+è¡¨ç¤ºç©ºæ ¼ã€‚ä¸ä¼šæ­£åˆ™æ—¶è¯·ä¼˜å…ˆç”¨æ™ºèƒ½è§„åˆ™ã€‚</p>
-            {renderCleanupPreview("regex-remove")}
-            {cleanupButton("regex-remove")}
-          </article>
-
-          <article className="cleanup-card">
-            <div className="cleanup-card-head">
-              <h3>æ›¿æ¢å†…å®¹ / Replace</h3>
-              <strong>{cleanupActionOps.replace.length} ops</strong>
-            </div>
-            <label>
-              æŸ¥æ‰¾ / Find
-              <input value={cleanup.replaceFrom} onChange={(event) => setCleanup({ ...cleanup, replaceFrom: event.target.value })} />
-            </label>
-            <label>
-              æ›¿æ¢ä¸º / Replace with
-              <input value={cleanup.replaceTo} onChange={(event) => setCleanup({ ...cleanup, replaceTo: event.target.value })} />
-            </label>
-            <label className="check-row compact">
-              <input type="checkbox" checked={cleanup.replaceCaseSensitive} onChange={(event) => setCleanup({ ...cleanup, replaceCaseSensitive: event.target.checked })} />
-              åŒºåˆ†å¤§å°å†™ / Case sensitive
-            </label>
-            {renderCleanupPreview("replace")}
-            {cleanupButton("replace")}
-          </article>
-
-          <article className="cleanup-card">
-            <div className="cleanup-card-head">
-              <h3>æ·»åŠ å‰åŽç¼€ / Add Text</h3>
-              <strong>{cleanupActionOps.add.length} ops</strong>
-            </div>
-            <label>
-              æ·»åŠ å†…å®¹ / Text
-              <input value={cleanup.addText} onChange={(event) => setCleanup({ ...cleanup, addText: event.target.value })} />
-            </label>
-            <label>
-              æ·»åŠ ä½ç½® / Position
-              <select value={cleanup.addPosition} onChange={(event) => setCleanup({ ...cleanup, addPosition: event.target.value as "prefix" | "suffix" })}>
-                <option value="prefix">å‰ç¼€ / Prefix</option>
-                <option value="suffix">åŽç¼€ / Suffix</option>
-              </select>
-            </label>
-            {renderCleanupPreview("add")}
-            {cleanupButton("add")}
-          </article>
-
-          <article className="cleanup-card">
-            <div className="cleanup-card-head">
-              <h3>åˆ é™¤é¦–å°¾ç©ºæ ¼ / Trim Spaces</h3>
-              <strong>{cleanupActionOps.trim.length} ops</strong>
-            </div>
-            <label className="check-row compact">
-              <input type="checkbox" checked={cleanup.trimOuterSpaces} onChange={(event) => setCleanup({ ...cleanup, trimOuterSpaces: event.target.checked })} />
-              åªåˆ é™¤æ–‡ä»¶å¤¹åç§°å¼€å¤´å’Œç»“å°¾çš„ç©ºç™½ / Trim outer spaces only
-            </label>
-            {renderCleanupPreview("trim")}
-            {cleanupButton("trim")}
-          </article>
-
-          <article className="cleanup-card wide">
-            <div className="cleanup-card-head">
-              <h3>æ— ç”¨å†…å®¹æŽ¨è / Suggested Noise</h3>
-              <strong>{cleanupActionOps.noise.length} ops</strong>
-            </div>
-            <div className="noise-list">
-              {noiseCandidates.length ? (
-                noiseCandidates.map((candidate) => (
-                  <label key={candidate.id} className="noise-option">
-                    <input type="checkbox" checked={cleanup.selectedNoiseTexts.includes(candidate.text)} onChange={() => toggleNoiseText(candidate.text)} />
-                    <span>
-                      <b>{candidate.text}</b>
-                      <em>{candidate.reason} Â· {candidate.count}é¡¹ Â· ç¤ºä¾‹ï¼š{candidate.example}</em>
+            <div className="folder-scroll">
+              {groups.length ? (
+                groups.map((group) => (
+                  <button
+                    key={group.id}
+                    className={`folder-row row-button ${selectedGroup?.id === group.id ? "selected" : ""}`}
+                    onClick={() => {
+                      setSelectedId(group.id);
+                      setSideTab("inspector");
+                    }}
+                  >
+                    <span className="folder-name" style={{ paddingLeft: `${Math.max(group.depth - 1, 0) * 14}px` }}>
+                      {group.originalName}
                     </span>
-                  </label>
+                    <span>{group.theme || "需要修正"}</span>
+                    <span>{group.folderStats.suffix || "无媒体"}</span>
+                    <span>{group.targetFolderName}</span>
+                  </button>
                 ))
               ) : (
-                <p className="cleanup-empty">æ‰«æåŽä¼šæŽ¨èDJAWA Photo Volç¼–å·ã€å¼€å¤´048è¿™ç±»ç–‘ä¼¼æ— ç”¨å†…å®¹ã€‚</p>
+                <div className="empty-state">
+                  <ListChecks size={32} />
+                  <strong>还没有扫描结果</strong>
+                  <span>选择根文件夹后点击扫描。</span>
+                </div>
               )}
             </div>
-            {renderCleanupPreview("noise")}
-            {cleanupButton("noise")}
-          </article>
-        </div>
-      </section>
+          </div>
+        </section>
 
-      <footer className="command-bar">
-        <button onClick={() => applyOperations(folderOps, "é‡å‘½åæ–‡ä»¶å¤¹ / Rename folders")} disabled={busy || !folderOps.length}>
-          <CheckCircle2 size={16} />
-          é‡å‘½åæ–‡ä»¶å¤¹ / Rename folders
-        </button>
-        <button onClick={() => applyOperations(fileOps, "é‡å‘½åæ–‡ä»¶ / Rename files")} disabled={busy || !fileOps.length}>
-          <Play size={16} />
-          é‡å‘½åæ–‡ä»¶ / Rename files
-        </button>
-        <button onClick={undo} disabled={busy || !lastLog}>
-          <RotateCcw size={16} />
-          æ’¤é”€ä¸Šæ¬¡ / Undo last
-        </button>
-        <button onClick={exportLog} disabled={busy || !scan}>
-          <Download size={16} />
-          å¯¼å‡ºæ—¥å¿— / Export log
-        </button>
-      </footer>
+        <aside className="side-panel">
+          <div className="side-tabs">
+            <button className={sideTab === "inspector" ? "active" : ""} onClick={() => setSideTab("inspector")}>
+              详情
+            </button>
+            <button className={sideTab === "cleanup" ? "active" : ""} onClick={() => setSideTab("cleanup")}>
+              名称清理
+            </button>
+          </div>
+          {sideTab === "inspector" ? renderInspector(selectedGroup) : renderCleanupTools()}
+        </aside>
+      </section>
     </main>
+  );
+
+  function renderInspector(group: ScanGroup | null) {
+    if (!group) {
+      return (
+        <div className="side-body center-body">
+          <AlertTriangle size={28} />
+          <strong>暂无详情</strong>
+          <span>扫描后选择一个文件夹查看。</span>
+        </div>
+      );
+    }
+    const imageFiles = group.files.filter((file) => file.kind === "image");
+    const videoFiles = group.files.filter((file) => file.kind === "video");
+    return (
+      <div className="side-body">
+        <div className="detail-card">
+          <h3>当前文件夹</h3>
+          <div className="info-grid">
+            <span>路径</span>
+            <b>{group.path}</b>
+            <span>主题</span>
+            <b>{group.theme || "需要修正"}</b>
+            <span>图片</span>
+            <b>{group.folderStats.imageCount}P</b>
+            <span>视频</span>
+            <b>{group.folderStats.videoCount}V</b>
+            <span>文件</span>
+            <b>{group.files.length}</b>
+          </div>
+        </div>
+
+        <div className={`warning-box ${group.warnings.length ? "has-warning" : ""}`}>
+          {group.warnings.length ? group.warnings.map((warning) => <p key={warning}>{warning}</p>) : <p>无警告</p>}
+        </div>
+
+        <div className="detail-card">
+          <h3>当前层文件预览</h3>
+          <PreviewList title="图片编号" files={imageFiles} />
+          <PreviewList title="视频编号" files={videoFiles} />
+        </div>
+      </div>
+    );
+  }
+
+  function renderCleanupTools() {
+    return (
+      <div className="side-body cleanup-body">
+        <CleanupCard title="普通文本删除" icon={<Eraser size={16} />} count={cleanupActionOps["text-remove"].length} action="text-remove">
+          <label className="field">
+            <span>要删除的固定文本</span>
+            <input value={cleanup.removeText} onChange={(event) => setCleanup({ ...cleanup, removeText: event.target.value })} placeholder="DJAWA" />
+          </label>
+        </CleanupCard>
+
+        <CleanupCard title="智能规则删除" icon={<Sparkles size={16} />} count={cleanupActionOps["smart-rule"].length} action="smart-rule">
+          <label className="field">
+            <span>选择规则</span>
+            <select value={cleanup.smartRule} onChange={(event) => setCleanup({ ...cleanup, smartRule: event.target.value as CleanupOptions["smartRule"] })}>
+              {Object.entries(smartRuleLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {cleanup.smartRule === "brand-word" ? (
+            <label className="field">
+              <span>品牌词</span>
+              <input value={cleanup.smartBrandText} onChange={(event) => setCleanup({ ...cleanup, smartBrandText: event.target.value })} placeholder="DJAWA" />
+            </label>
+          ) : null}
+        </CleanupCard>
+
+        <CleanupCard title="高级正则删除" icon={<Scissors size={16} />} count={cleanupActionOps["regex-remove"].length} action="regex-remove">
+          <label className="field">
+            <span>表达式</span>
+            <input value={cleanup.regexRemovePattern} onChange={(event) => setCleanup({ ...cleanup, regexRemovePattern: event.target.value })} placeholder="DJAWA Photo Vol \\d+" />
+          </label>
+          <div className="regex-examples">
+            {["DJAWA Photo Vol \\d+", "^\\d{2,4}\\s+", "\\s+-\\s+\\d{2,4}\\s+"].map((pattern) => (
+              <button key={pattern} type="button" onClick={() => setCleanup({ ...cleanup, regexRemovePattern: pattern })}>
+                {pattern}
+              </button>
+            ))}
+          </div>
+          <label className="check-row">
+            <input type="checkbox" checked={cleanup.regexCaseSensitive} onChange={(event) => setCleanup({ ...cleanup, regexCaseSensitive: event.target.checked })} />
+            区分大小写
+          </label>
+          <p className="hint">\\d+表示数字，^表示开头，\\s+表示空格。不会写正则时优先用智能规则。</p>
+        </CleanupCard>
+
+        <CleanupCard title="替换内容" icon={<Replace size={16} />} count={cleanupActionOps.replace.length} action="replace">
+          <label className="field">
+            <span>查找</span>
+            <input value={cleanup.replaceFrom} onChange={(event) => setCleanup({ ...cleanup, replaceFrom: event.target.value })} />
+          </label>
+          <label className="field">
+            <span>替换为</span>
+            <input value={cleanup.replaceTo} onChange={(event) => setCleanup({ ...cleanup, replaceTo: event.target.value })} />
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={cleanup.replaceCaseSensitive} onChange={(event) => setCleanup({ ...cleanup, replaceCaseSensitive: event.target.checked })} />
+            区分大小写
+          </label>
+        </CleanupCard>
+
+        <CleanupCard title="添加前缀后缀" icon={<Plus size={16} />} count={cleanupActionOps.add.length} action="add">
+          <label className="field">
+            <span>添加内容</span>
+            <input value={cleanup.addText} onChange={(event) => setCleanup({ ...cleanup, addText: event.target.value })} />
+          </label>
+          <label className="field">
+            <span>位置</span>
+            <select value={cleanup.addPosition} onChange={(event) => setCleanup({ ...cleanup, addPosition: event.target.value as "prefix" | "suffix" })}>
+              <option value="prefix">前缀</option>
+              <option value="suffix">后缀</option>
+            </select>
+          </label>
+        </CleanupCard>
+
+        <CleanupCard title="删除首尾空格" icon={<Scissors size={16} />} count={cleanupActionOps.trim.length} action="trim">
+          <label className="check-row">
+            <input type="checkbox" checked={cleanup.trimOuterSpaces} onChange={(event) => setCleanup({ ...cleanup, trimOuterSpaces: event.target.checked })} />
+            只删除文件夹名称开头和结尾的空白
+          </label>
+        </CleanupCard>
+
+        <CleanupCard title="无用内容推荐" icon={<Sparkles size={16} />} count={cleanupActionOps.noise.length} action="noise">
+          <div className="noise-list">
+            {noiseCandidates.length ? (
+              noiseCandidates.map((candidate) => (
+                <label key={candidate.id} className="noise-option">
+                  <input type="checkbox" checked={cleanup.selectedNoiseTexts.includes(candidate.text)} onChange={() => toggleNoiseText(candidate.text)} />
+                  <span>
+                    <b>{candidate.text}</b>
+                    <em>
+                      {candidate.reason} · {candidate.count}项 · 示例：{candidate.example}
+                    </em>
+                  </span>
+                </label>
+              ))
+            ) : (
+              <p className="cleanup-empty">扫描后会推荐DJAWA Photo Vol编号、开头048这类疑似无用内容。程序只推荐，必须勾选后才执行。</p>
+            )}
+          </div>
+        </CleanupCard>
+      </div>
+    );
+  }
+
+  function CleanupCard(props: { title: string; icon: React.ReactNode; count: number; action: CleanupAction; children: React.ReactNode }) {
+    return (
+      <article className="cleanup-card">
+        <div className="cleanup-title">
+          <span>
+            {props.icon}
+            {props.title}
+          </span>
+          <b>{props.count}项</b>
+        </div>
+        {props.children}
+        {renderCleanupPreview(props.action)}
+        {cleanupButton(props.action)}
+      </article>
+    );
+  }
+}
+
+function PreviewList(props: { title: string; files: ScanGroup["files"] }) {
+  return (
+    <div className="file-preview-group">
+      <div className="file-preview-title">
+        <span>{props.title}</span>
+        <b>{props.files.length}个</b>
+      </div>
+      <div className="mini-list">
+        {props.files.slice(0, 8).map((file) => (
+          <div key={file.path}>
+            <span>{file.name}</span>
+            <strong>{file.targetName}</strong>
+          </div>
+        ))}
+        {!props.files.length ? <em>无文件</em> : null}
+        {props.files.length > 8 ? <em>还有{props.files.length - 8}项</em> : null}
+      </div>
+    </div>
   );
 }
 
@@ -523,4 +571,3 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>,
 );
-

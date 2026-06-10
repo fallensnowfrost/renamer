@@ -6,12 +6,14 @@ dist/
 release/
 APP/**/*.exe
 werenameit/APP/**/*.exe
+werenameit/APP/werenameit_*_Windows_x64/
 archive/**/*.exe
 werenameit/dist/
 werenameit/release/
 werenameit/node_modules/
 werenameit/.npm-cache/
 werenameit/.electron-cache/
+werenameit/APP/**/app/
 archive/**/app/
 archive/**/duplicate-src-from-migration/
 

@@ -1,11 +1,9 @@
 # werenameit 0.2.0-alpha.1 SHA256校验
 
 状态：未发布版本 / Unreleased  
-生成日期：待正式打包后填写
-
-当前尚未生成正式发布exe。完成文件夹式发布包后，在此记录：
+生成日期：2026-06-11
 
 | 文件 | 大小 | SHA256 |
 | --- | ---: | --- |
-| `werenameit.exe` | 待填写 | 待填写 |
-| `app/werenameit.exe` | 待填写 | 待填写 |
+| `werenameit.exe` | 4.5KB | `07628E49C93CF3B745B027B99BAAA725209771AB038125B7FBB59A4E28D122E8` |
+| `app/werenameit.exe` | 195MB | `3A985A7C6BF9BAEEC5A432876FB31885ABCAFC3A00D7EC6379AC7F6CC4C05E3F` |
